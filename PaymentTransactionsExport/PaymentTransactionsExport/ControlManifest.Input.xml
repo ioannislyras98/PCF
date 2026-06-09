@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest>
+  <control namespace="VMS" constructor="PaymentTransactionsExport" version="0.0.1"
+           display-name-key="Payment Transactions Export"
+           description-key="Builds and downloads an Excel/CSV file from data fed by the canvas app (supports chunked feeding for large volumes)."
+           control-type="standard">
+    <external-service-usage enabled="false">
+    </external-service-usage>
+
+    <!-- "excel" (default) or "csv" -->
+    <property name="exportFormat" display-name-key="Export Format"
+              description-key="excel or csv. Default: excel."
+              of-type="SingleLine.Text" usage="input" required="false" />
+
+    <!-- Base file name without extension -->
+    <property name="fileName" display-name-key="File Name"
+              description-key="Base file name without extension. Default: PaymentTransactions."
+              of-type="SingleLine.Text" usage="input" required="false" />
+
+    <!-- JSON array of row objects: the full dataset (single-shot) or the current chunk (append mode) -->
+    <property name="inputData" display-name-key="Input Data (JSON)"
+              description-key="JSON array of row objects, or an OData {value:[...]} object."
+              of-type="Multiple" usage="input" required="false" />
+
+    <!-- Optional JSON describing columns/order/headers: [{&quot;key&quot;:&quot;...&quot;,&quot;header&quot;:&quot;...&quot;}] -->
+    <property name="columnsConfig" display-name-key="Columns Config (JSON)"
+              description-key="Optional JSON array of {key,header} to control which columns, their order and headers. If empty, inferred from the data."
+              of-type="Multiple" usage="input" required="false" />
+
+    <!-- When true, inputData is appended to the in-memory buffer (used for paged/chunked feeding) -->
+    <property name="appendMode" display-name-key="Append Mode"
+              description-key="When ON, each fed chunk is appended to the buffer (for large/paged exports). When OFF, inputData is treated as the full dataset on export."
+              of-type="TwoOptions" usage="input" required="false" />
+
+    <!-- Increment to append the current inputData chunk to the buffer (append mode) -->
+    <property name="dataVersion" display-name-key="Data Version"
+              description-key="Increment this each time a new chunk is supplied in inputData (append mode) so the control ingests it."
+              of-type="Whole.None" usage="input" required="false" />
+
+    <!-- Increment to build and download the file from the buffer -->
+    <property name="triggerExport" display-name-key="Trigger Export"
+              description-key="Increment this value to build and download the file."
+              of-type="Whole.None" usage="input" required="false" />
+
+    <!-- Increment to clear the in-memory buffer before a new export -->
+    <property name="resetBuffer" display-name-key="Reset Buffer"
+              description-key="Increment this value to clear the in-memory buffer (call before feeding a new paged export)."
+              of-type="Whole.None" usage="input" required="false" />
+
+    <!-- Show the built-in Export buttons (handy for local testing) -->
+    <property name="showButtons" display-name-key="Show Buttons"
+              description-key="Show the built-in Excel/CSV buttons. Default: shown. Turn OFF in production if you trigger from your own button."
+              of-type="TwoOptions" usage="input" required="false" />
+
+    <!-- Outputs -->
+    <property name="status" display-name-key="Status"
+              description-key="Last status message."
+              of-type="SingleLine.Text" usage="output" required="false" />
+    <property name="rowCount" display-name-key="Row Count"
+              description-key="Number of rows currently in the buffer."
+              of-type="Whole.None" usage="output" required="false" />
+    <property name="lastError" display-name-key="Last Error"
+              description-key="Last error message, if any."
+              of-type="SingleLine.Text" usage="output" required="false" />
+
+    <resources>
+      <code path="index.ts" order="1"/>
+      <css path="css/PaymentTransactionsExport.css" order="1" />
+    </resources>
+  </control>
+</manifest>
