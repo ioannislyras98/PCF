@@ -22,7 +22,7 @@ PCF/                                  (repo root, git)
 │   ├── package.json / pcfconfig.json / tsconfig.json
 │   └── .gitignore                    (node_modules, out, bin, obj)
 │
-├── ExampleControl/                   (each new component = a new top-level folder)
+├── VesselScheduleGrid/               (each new component = a new top-level folder)
 │   └── ...
 │
 └── Solution/                         (the shared Dataverse solution)
@@ -36,7 +36,7 @@ PCF/                                  (repo root, git)
   codebase. Each one stays self-contained in its own folder and the solution collects them
   via `<ProjectReference>` entries.
 - **Shared across all components:**
-  - Namespace `VMS` → controls become `VMS.PaymentTransactionsExport`, `VMS.ExampleControl`,
+  - Namespace `VMS` → controls become `VMS.PaymentTransactionsExport`, `VMS.VesselScheduleGrid`,
     etc. (grouped under one product).
   - Publisher `VMSControls` / prefix `vms`.
   - One solution: **`VMS_PCF`**.
@@ -160,28 +160,3 @@ all environments, otherwise the pipeline creates a duplicate solution instead of
 > (premium licensing).
 
 ---
-
-## 6. (Optional, future) Sharing code between components
-
-If several components end up sharing logic (e.g. Excel/CSV export utilities), extract it into
-a shared TypeScript module and wire it up with **npm workspaces** so code isn't duplicated.
-Today every component is self-contained; don't add this until real duplication appears.
-
----
-
-## 7. Verifying that everything lands in one solution
-
-After adding a second component and building:
-
-```bash
-dotnet build Solution/Solution.cdsproj -c Release
-```
-
-Open the produced `Solution/bin/Release/*.zip` and confirm it contains **both** controls, e.g.:
-
-```
-Controls/VMS.PaymentTransactionsExport/
-Controls/VMS.VesselScheduleGrid/
-```
-
-If both appear, the shared solution is wired correctly.
