@@ -6,12 +6,15 @@ type Row = Record<string, unknown>;
 interface ColumnDef {
     key: string;
     header: string;
+    // Optional Excel cell typing/formatting, driven from the canvas ColumnsConfig.
+    type?: "text" | "number" | "date";
+    format?: string;
 }
 
-const DEFAULT_FILE_NAME = "PaymentTransactions";
-const SHEET_NAME = "Payment Transactions";
+const DEFAULT_FILE_NAME = "Export";
+const SHEET_NAME = "Data";
 
-export class PaymentTransactionsExport
+export class DataExport
     implements ComponentFramework.StandardControl<IInputs, IOutputs>
 {
     private context!: ComponentFramework.Context<IInputs>;
@@ -45,6 +48,12 @@ export class PaymentTransactionsExport
         this.context = context;
         this.notifyOutputChanged = notifyOutputChanged;
         this.container = container;
+        // Baseline the increment-triggers to their CURRENT values so a persisted /
+        // non-zero initial value (e.g. a context/global var that survived navigation)
+        // does NOT auto-fire an export on first render. Only a later increment fires.
+        this.lastTrigger = context.parameters.triggerExport.raw ?? 0;
+        this.lastDataVersion = context.parameters.dataVersion.raw ?? 0;
+        this.lastReset = context.parameters.resetBuffer.raw ?? 0;
         this.renderUI();
     }
 
@@ -133,7 +142,7 @@ export class PaymentTransactionsExport
             const cols = this.resolveColumns();
 
             if (format === "csv") {
-                const csv = this.buildCsv(cols);
+                const csv = this.buildCsv(cols, this.csvDelimiter());
                 // Prepend a UTF-8 BOM so Excel renders Greek/Unicode correctly.
                 const blob = new Blob(["﻿" + csv], {
                     type: "text/csv;charset=utf-8;",
@@ -141,9 +150,10 @@ export class PaymentTransactionsExport
                 this.downloadBlob(blob, `${baseName}.csv`);
             } else {
                 const aoa = this.toArrayOfArrays(cols);
-                const ws = XLSX.utils.aoa_to_sheet(aoa);
+                const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+                this.applyColumnFormats(ws, cols);
                 const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, SHEET_NAME);
+                XLSX.utils.book_append_sheet(wb, ws, this.sheetName());
                 const out = XLSX.write(wb, {
                     bookType: "xlsx",
                     type: "array",
@@ -161,6 +171,38 @@ export class PaymentTransactionsExport
             this.setStatus(this.lastError);
         }
         this.notifyOutputChanged();
+    }
+
+    /** CSV delimiter from the manifest property (default comma). */
+    private csvDelimiter(): string {
+        const d = (this.context.parameters.csvDelimiter.raw ?? "").toString();
+        return d.length > 0 ? d : ",";
+    }
+
+    /** Excel sheet/tab name from the manifest property, sanitized for Excel's rules. */
+    private sheetName(): string {
+        const raw =
+            (this.context.parameters.sheetName.raw ?? "").toString().trim() ||
+            SHEET_NAME;
+        // Excel tab names: max 31 chars, cannot contain \ / ? * [ ] :
+        return raw.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || SHEET_NAME;
+    }
+
+    /** Apply per-column Excel number/date formats (the `format` in ColumnsConfig). */
+    private applyColumnFormats(ws: XLSX.WorkSheet, cols: ColumnDef[]): void {
+        const n = this.buffer.length;
+        cols.forEach((col, c) => {
+            if (!col.format) {
+                return;
+            }
+            for (let i = 0; i < n; i++) {
+                const addr = XLSX.utils.encode_cell({ c, r: i + 1 });
+                const cell = ws[addr] as XLSX.CellObject | undefined;
+                if (cell) {
+                    cell.z = col.format;
+                }
+            }
+        });
     }
 
     // -- Data ingestion -------------------------------------------------------
@@ -211,6 +253,8 @@ export class PaymentTransactionsExport
                         : {
                               key: (c as ColumnDef).key,
                               header: (c as ColumnDef).header ?? (c as ColumnDef).key,
+                              type: (c as ColumnDef).type,
+                              format: (c as ColumnDef).format,
                           }
                 );
             }
@@ -222,12 +266,28 @@ export class PaymentTransactionsExport
         return [];
     }
 
-    private toArrayOfArrays(cols: ColumnDef[]): (string | number)[][] {
-        const rows: (string | number)[][] = [cols.map((c) => c.header)];
+    private toArrayOfArrays(cols: ColumnDef[]): (string | number | Date)[][] {
+        const rows: (string | number | Date)[][] = [cols.map((c) => c.header)];
         for (const r of this.buffer) {
-            rows.push(cols.map((c) => this.cell(r[c.key])));
+            rows.push(cols.map((c) => this.typedCell(r[c.key], c)));
         }
         return rows;
+    }
+
+    /** Coerce a value to a real number / Date for Excel when the column declares a type. */
+    private typedCell(v: unknown, col: ColumnDef): string | number | Date {
+        if (v === null || v === undefined || v === "") {
+            return "";
+        }
+        if (col.type === "number") {
+            const n = typeof v === "number" ? v : Number(v);
+            return Number.isNaN(n) ? this.cell(v) : n;
+        }
+        if (col.type === "date") {
+            const d = v instanceof Date ? v : new Date(String(v));
+            return Number.isNaN(d.getTime()) ? this.cell(v) : d;
+        }
+        return this.cell(v);
     }
 
     private cell(v: unknown): string | number {
@@ -243,18 +303,32 @@ export class PaymentTransactionsExport
         return String(v);
     }
 
-    private buildCsv(cols: ColumnDef[]): string {
+    private buildCsv(cols: ColumnDef[], delim: string): string {
         const esc = (val: string | number): string => {
             const s = String(val ?? "");
-            // Quote if it contains a delimiter, quote, or newline.
-            return /[",\n\r;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+            // Quote if it contains the delimiter, a quote, or a newline.
+            const needsQuote =
+                s.includes(delim) ||
+                s.includes('"') ||
+                s.includes("\n") ||
+                s.includes("\r");
+            return needsQuote ? `"${s.replace(/"/g, '""')}"` : s;
         };
         const lines: string[] = [];
-        lines.push(cols.map((c) => esc(c.header)).join(","));
+        lines.push(cols.map((c) => esc(c.header)).join(delim));
         for (const r of this.buffer) {
-            lines.push(cols.map((c) => esc(this.cell(r[c.key]))).join(","));
+            lines.push(cols.map((c) => esc(this.csvCell(r[c.key], c))).join(delim));
         }
         return lines.join("\r\n");
+    }
+
+    /** CSV cell value: numbers stay numeric; dates/text use the plain string form. */
+    private csvCell(v: unknown, col: ColumnDef): string | number {
+        if (col.type === "number") {
+            const n = typeof v === "number" ? v : Number(v);
+            return Number.isNaN(n) ? this.cell(v) : n;
+        }
+        return this.cell(v);
     }
 
     // -- Download -------------------------------------------------------------

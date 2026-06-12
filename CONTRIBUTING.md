@@ -16,9 +16,9 @@ all of them into a single deployable.
 
 ```
 PCF/                                  (repo root, git)
-├── PaymentTransactionsExport/        (component #1 — PCF project)
-│   ├── PaymentTransactionsExport/    control: ControlManifest.Input.xml, index.ts, css/
-│   ├── PaymentTransactionsExport.pcfproj
+├── DataExport/                       (component #1 — PCF project)
+│   ├── DataExport/                   control: ControlManifest.Input.xml, index.ts, css/
+│   ├── DataExport.pcfproj
 │   ├── package.json / pcfconfig.json / tsconfig.json
 │   └── .gitignore                    (node_modules, out, bin, obj)
 │
@@ -36,7 +36,7 @@ PCF/                                  (repo root, git)
   codebase. Each one stays self-contained in its own folder and the solution collects them
   via `<ProjectReference>` entries.
 - **Shared across all components:**
-  - Namespace `VMS` → controls become `VMS.PaymentTransactionsExport`, `VMS.VesselScheduleGrid`,
+  - Namespace `VMS` → controls become `VMS.DataExport`, `VMS.VesselScheduleGrid`,
     etc. (grouped under one product).
   - Publisher `VMSControls` / prefix `vms`.
   - One solution: **`VMS_PCF`**.
@@ -79,7 +79,7 @@ In the new component's `tsconfig.json`, inside `compilerOptions`, set:
 Without this, the production / solution build fails with `TS5103`. The cause is the
 deprecated `moduleResolution: "node"` inherited from the pcf-scripts base tsconfig; the
 `bundler` resolution is the clean fix. (The same fix is already applied in
-`PaymentTransactionsExport`.)
+`DataExport`.)
 
 ### Step 3 — Register the component in the shared solution
 
@@ -88,7 +88,7 @@ existing reference:
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="..\PaymentTransactionsExport\PaymentTransactionsExport.pcfproj" />
+  <ProjectReference Include="..\DataExport\DataExport.pcfproj" />
   <ProjectReference Include="..\VesselScheduleGrid\VesselScheduleGrid.pcfproj" />   <!-- NEW -->
 </ItemGroup>
 ```

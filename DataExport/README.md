@@ -1,9 +1,14 @@
-# PaymentTransactionsExport (PBM-18)
+# DataExport — Excel/CSV Export
 
-PCF code component (namespace `VMS`) that builds and downloads an **Excel (.xlsx)** or **CSV**
-file from data supplied by the **canvas app**. Designed for a canvas host, so it does not call
-Dataverse itself — the app (via a Power Automate flow) supplies the rows, and this control turns
-them into a file and triggers the browser download.
+PCF code component (`VMS.DataExport`, namespace `VMS`) that builds and downloads an
+**Excel (.xlsx)** or **CSV** file from data supplied by the **canvas app**. It is **generic and
+reusable on any screen** — the file name, columns and data are all passed in as properties.
+Designed for a canvas host, so it does not call Dataverse itself — the app (via a Power Automate
+flow) supplies the rows, and this control turns them into a file and triggers the browser
+download.
+
+> Originally built for **PBM-18 (Payment Transactions export)**; the PBM-18 column/data samples
+> below are just one example of how to drive it.
 
 ## Why this design
 
@@ -18,9 +23,11 @@ them into a file and triggers the browser download.
 | Property | Type | Dir | Purpose |
 |---|---|---|---|
 | `exportFormat` | Text | in | `"excel"` (default) or `"csv"`. |
-| `fileName` | Text | in | Base name without extension (default `PaymentTransactions`). |
+| `fileName` | Text | in | Base name without extension, **set from the canvas app** (e.g. `"Payment Transactions"`). Default `Export`. |
+| `sheetName` | Text | in | Excel worksheet/tab name. Default `Data`. |
+| `csvDelimiter` | Text | in | CSV column separator. Default `,`. Use `;` for Greek/European Excel. |
 | `inputData` | Multiline | in | JSON array of row objects, or an OData `{value:[...]}` object. |
-| `columnsConfig` | Multiline | in | Optional `[{ "key": "...", "header": "..." }]` — controls which columns, their order and headers. If empty, inferred from the data. |
+| `columnsConfig` | Multiline | in | Optional `[{ "key", "header", "type", "format" }]` — controls which columns, their order, headers and **Excel cell type**. `type` = `text` (default) / `number` / `date`; `format` = optional Excel number/date format (e.g. `#,##0.00`, `dd/mm/yyyy`). If empty, inferred from the data. |
 | `appendMode` | TwoOptions | in | ON = each fed chunk is appended (paged export). OFF = `inputData` is the full dataset on export. |
 | `dataVersion` | Whole | in | **Increment** to ingest the current `inputData` chunk (append mode). |
 | `triggerExport` | Whole | in | **Increment** to build + download the file. |
@@ -78,9 +85,9 @@ In the harness right-hand panel:
   {"key":"serviceTitle","header":"Service Title"},
   {"key":"vesselName","header":"Vessel Name"},
   {"key":"trainingCentreName","header":"Training Centre Name"},
-  {"key":"fee","header":"Fee"},
+  {"key":"fee","header":"Fee","type":"number","format":"#,##0.00"},
   {"key":"gpgOrderId","header":"GPG Order ID"},
-  {"key":"gpgOrderCreatedOn","header":"GPG Order Creation Date - Time"},
+  {"key":"gpgOrderCreatedOn","header":"GPG Order Creation Date - Time","type":"date","format":"dd/mm/yyyy hh:mm"},
   {"key":"invoiceId","header":"Invoice ID"}
 ]
 ```
@@ -88,5 +95,8 @@ In the harness right-hand panel:
 
 ## Deploy (after local test passes)
 
-1. `pac pcf push --publisher-prefix <prefix>` (dev / quick iterate).
-2. Final: package into a Dataverse **solution** and import.
+This control ships inside the shared **`VMS_PCF`** Dataverse solution together with the other
+VMS components. To build and deploy see [../CONTRIBUTING.md](../CONTRIBUTING.md) (build the
+solution, import the unmanaged zip into DEV, then promote to TEST/PROD via the pipeline).
+
+For a quick local-to-dev iteration you can also use `pac pcf push --publisher-prefix vms`.

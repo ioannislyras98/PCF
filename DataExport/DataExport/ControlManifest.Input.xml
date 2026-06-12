@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="VMS" constructor="PaymentTransactionsExport" version="0.0.1"
-           display-name-key="Payment Transactions Export"
+  <control namespace="VMS" constructor="DataExport" version="0.0.2"
+           display-name-key="Data Export (Excel/CSV)"
            description-key="Builds and downloads an Excel/CSV file from data fed by the canvas app (supports chunked feeding for large volumes)."
            control-type="standard">
     <external-service-usage enabled="false">
@@ -14,7 +14,17 @@
 
     <!-- Base file name without extension -->
     <property name="fileName" display-name-key="File Name"
-              description-key="Base file name without extension. Default: PaymentTransactions."
+              description-key="Base file name without extension, set from the canvas app (e.g. &quot;Payment Transactions&quot;). Default: Export."
+              of-type="SingleLine.Text" usage="input" required="false" />
+
+    <!-- Worksheet (tab) name for the .xlsx -->
+    <property name="sheetName" display-name-key="Sheet Name"
+              description-key="Name of the worksheet/tab in the Excel file, set from the canvas app. Default: Data."
+              of-type="SingleLine.Text" usage="input" required="false" />
+
+    <!-- CSV column delimiter -->
+    <property name="csvDelimiter" display-name-key="CSV Delimiter"
+              description-key="Single character separating CSV columns. Default: comma. Use a semicolon (;) for Greek/European Excel."
               of-type="SingleLine.Text" usage="input" required="false" />
 
     <!-- JSON array of row objects: the full dataset (single-shot) or the current chunk (append mode) -->
@@ -24,7 +34,7 @@
 
     <!-- Optional JSON describing columns/order/headers: [{&quot;key&quot;:&quot;...&quot;,&quot;header&quot;:&quot;...&quot;}] -->
     <property name="columnsConfig" display-name-key="Columns Config (JSON)"
-              description-key="Optional JSON array of {key,header} to control which columns, their order and headers. If empty, inferred from the data."
+              description-key="Optional JSON array of {key,header,type,format} to control which columns, their order, headers and Excel cell type. type = text (default) | number | date; format = optional Excel number/date format (e.g. #,##0.00 or dd/mm/yyyy). If empty, columns are inferred from the data."
               of-type="Multiple" usage="input" required="false" />
 
     <!-- When true, inputData is appended to the in-memory buffer (used for paged/chunked feeding) -->
@@ -65,7 +75,7 @@
 
     <resources>
       <code path="index.ts" order="1"/>
-      <css path="css/PaymentTransactionsExport.css" order="1" />
+      <css path="css/DataExport.css" order="1" />
     </resources>
   </control>
 </manifest>
