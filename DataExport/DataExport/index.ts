@@ -173,6 +173,9 @@ export class DataExport
         this.log("savePending: user clicked Download →", this.pendingFileName);
         this.downloadBlob(this.pendingBlob, this.pendingFileName);
         this.setStatus(`Downloaded ${this.pendingFileName}`);
+        // Hide the Download button once used, so the host-app Export button
+        // (which may sit behind it) becomes visible/clickable again.
+        this.hideDownloadButton();
         this.notifyOutputChanged();
     }
 
@@ -472,7 +475,17 @@ export class DataExport
     }
 
     private showDownloadButton(): void {
-        this.downloadBtn.textContent = `⬇ Download ${this.pendingFileName}`;
+        const p = this.context.parameters;
+        // Label, background and text color are all canvas-driven so the button can
+        // match the host app's theme. Empty values fall back to the CSS defaults.
+        const label = (p.downloadLabel.raw ?? "").toString().trim();
+        this.downloadBtn.textContent =
+            label || `⬇ Download ${this.pendingFileName}`;
+        const bg = (p.downloadColor.raw ?? "").toString().trim();
+        const fg = (p.downloadTextColor.raw ?? "").toString().trim();
+        this.downloadBtn.style.background = bg;
+        this.downloadBtn.style.borderColor = bg;
+        this.downloadBtn.style.color = fg;
         this.downloadEl.style.display = "flex";
     }
 
@@ -508,8 +521,13 @@ export class DataExport
         if (!this.statusEl) {
             return;
         }
+        // Only surface errors in the UI; normal status stays silent (the host app
+        // does not want any text under the button). Full tracing is in the console.
+        // When there is nothing to show, collapse the row so the Download button can
+        // fill the control's full Height.
         const hasError = this.lastError.length > 0;
-        this.statusEl.textContent = hasError ? this.lastError : this.status;
+        this.statusEl.textContent = hasError ? this.lastError : "";
+        this.statusEl.style.display = hasError ? "block" : "none";
         this.statusEl.classList.toggle("vms-pte-status--error", hasError);
     }
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="VMS" constructor="DataExport" version="0.0.4"
+  <control namespace="VMS" constructor="DataExport" version="0.0.6"
            display-name-key="Data Export (Excel/CSV)"
            description-key="Builds and downloads an Excel/CSV file from data fed by the canvas app (supports chunked feeding for large volumes)."
            control-type="standard">
@@ -61,6 +61,17 @@
     <property name="showButtons" display-name-key="Show Buttons"
               description-key="Show the built-in Excel/CSV buttons. Default: shown. Turn OFF in production if you trigger from your own button."
               of-type="TwoOptions" usage="input" required="false" />
+
+    <!-- Download button (host-app trigger model): label/colors set from the canvas to match your theme -->
+    <property name="downloadLabel" display-name-key="Download Button Label"
+              description-key="Text for the Download button shown after a host-app trigger. If empty, shows Download followed by the file name."
+              of-type="SingleLine.Text" usage="input" required="false" />
+    <property name="downloadColor" display-name-key="Download Button Color"
+              description-key="Background color of the Download button (any CSS color, e.g. #595959 or RGBA). Default: blue."
+              of-type="SingleLine.Text" usage="input" required="false" />
+    <property name="downloadTextColor" display-name-key="Download Button Text Color"
+              description-key="Text color of the Download button (any CSS color). Default: white."
+              of-type="SingleLine.Text" usage="input" required="false" />
 
     <!-- Outputs -->
     <property name="status" display-name-key="Status"

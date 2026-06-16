@@ -5,6 +5,18 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* Fill the area the canvas allocates, so the Download button can match the
+       Height set on the control instance. */
+    height: 100%;
+    box-sizing: border-box;
+    /* The control may be placed ON TOP of a host-app button. When it has nothing
+       to show, the empty area must NOT swallow clicks meant for what is behind it. */
+    pointer-events: none;
+}
+
+/* Only the real, visible buttons are clickable. */
+.vms-pte-btn {
+    pointer-events: auto;
 }
 
 .vms-pte-buttons {
@@ -44,6 +56,10 @@
 
 .vms-pte-download {
     display: flex;
+    /* Take the full height the control offers (the buttons row is hidden in
+       production and the empty status row collapses), so the button can fill it. */
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 .vms-pte-btn--download {
@@ -51,6 +67,16 @@
     background: #0f6cbd;
     color: #ffffff;
     font-weight: 600;
+    /* Match the control's Height: fill the wrapper and center the label. */
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 2px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
 }
 
 .vms-pte-btn--download:hover {
