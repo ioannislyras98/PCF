@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest>
-  <control namespace="VMS" constructor="DataExport" version="0.0.2"
+  <control namespace="VMS" constructor="DataExport" version="0.0.4"
            display-name-key="Data Export (Excel/CSV)"
            description-key="Builds and downloads an Excel/CSV file from data fed by the canvas app (supports chunked feeding for large volumes)."
            control-type="standard">

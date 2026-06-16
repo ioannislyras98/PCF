@@ -38,6 +38,12 @@ export class DataExport
     // UI elements.
     private buttonsEl!: HTMLDivElement;
     private statusEl!: HTMLDivElement;
+    private downloadEl!: HTMLDivElement;
+    private downloadBtn!: HTMLButtonElement;
+
+    // File prepared by a host-app trigger, waiting for the user's Download click.
+    private pendingBlob: Blob | null = null;
+    private pendingFileName = "";
 
     public init(
         context: ComponentFramework.Context<IInputs>,
@@ -85,7 +91,17 @@ export class DataExport
         if (trigger !== this.lastTrigger) {
             this.lastTrigger = trigger;
             if (trigger) {
-                this.runExport();
+                this.log(
+                    "triggerExport fired →",
+                    trigger,
+                    "| format:",
+                    p.exportFormat.raw,
+                    "| appendMode:",
+                    p.appendMode.raw,
+                    "| inputData length:",
+                    (p.inputData.raw ?? "").length
+                );
+                this.prepareExport();
             }
         }
 
@@ -109,68 +125,129 @@ export class DataExport
 
     // -- Export orchestration -------------------------------------------------
 
-    /** Build + download using the format from the manifest property. */
-    private runExport(formatOverride?: "excel" | "csv"): void {
+    /**
+     * Triggered from the HOST APP (triggerExport increment). Browsers / the Power
+     * Apps player iframe only allow a file download that is started by a real user
+     * gesture (sandbox `allow-downloads`). A download fired here — after the async
+     * flow, with no fresh gesture — gets silently blocked in stricter runtimes
+     * (e.g. published/managed). So we only BUILD the file and reveal a Download
+     * button; the actual save happens on the user's click (savePending).
+     */
+    private prepareExport(): void {
+        const built = this.runBuild();
+        if (!built) {
+            this.hideDownloadButton();
+            return;
+        }
+        this.pendingBlob = built.blob;
+        this.pendingFileName = built.fileName;
+        this.log(
+            "prepareExport: file READY →",
+            built.fileName,
+            "(",
+            this.buffer.length,
+            "rows ) — waiting for the user's Download click"
+        );
+        this.setStatus(`Ready: ${this.buffer.length} rows — click Download`);
+        this.showDownloadButton();
+        this.notifyOutputChanged();
+    }
+
+    /** Built-in buttons: a direct user click, so the file can download immediately. */
+    private runExportNow(formatOverride: "excel" | "csv"): void {
+        const built = this.runBuild(formatOverride);
+        if (!built) {
+            return;
+        }
+        this.downloadBlob(built.blob, built.fileName);
+        this.setStatus(`Exported ${this.buffer.length} rows (${formatOverride})`);
+        this.notifyOutputChanged();
+    }
+
+    /** Save the file prepared by prepareExport() — fired by the user's Download click. */
+    private savePending(): void {
+        if (!this.pendingBlob) {
+            this.log("savePending: no file prepared — ignoring click");
+            return;
+        }
+        this.log("savePending: user clicked Download →", this.pendingFileName);
+        this.downloadBlob(this.pendingBlob, this.pendingFileName);
+        this.setStatus(`Downloaded ${this.pendingFileName}`);
+        this.notifyOutputChanged();
+    }
+
+    /** Ingest the current input (single-shot) and build the file; null on no data/error. */
+    private runBuild(
+        formatOverride?: "excel" | "csv"
+    ): { blob: Blob; fileName: string } | null {
         const p = this.context.parameters;
         const append = p.appendMode.raw === true;
-
         // In single-shot (non-append) mode, treat inputData as the full dataset.
         if (!append) {
             this.ingest(p.inputData.raw ?? "", /*append*/ false);
         }
-
         const fmt =
             formatOverride ??
             ((p.exportFormat.raw ?? "excel").toString().trim().toLowerCase() === "csv"
                 ? "csv"
                 : "excel");
-
         const baseName =
             (p.fileName.raw ?? "").toString().trim() || DEFAULT_FILE_NAME;
-
-        this.export(fmt, baseName);
+        return this.buildFile(fmt, baseName);
     }
 
-    private export(format: "excel" | "csv", baseName: string): void {
+    private buildFile(
+        format: "excel" | "csv",
+        baseName: string
+    ): { blob: Blob; fileName: string } | null {
         try {
             if (this.buffer.length === 0) {
+                this.log("buildFile: NO DATA in buffer — nothing to export");
                 this.setStatus("No data to export");
                 this.notifyOutputChanged();
-                return;
+                return null;
             }
-
             const cols = this.resolveColumns();
-
+            this.log(
+                "buildFile:",
+                format,
+                "·",
+                this.buffer.length,
+                "rows ·",
+                cols.length,
+                "columns →",
+                cols.map((c) => c.key)
+            );
             if (format === "csv") {
                 const csv = this.buildCsv(cols, this.csvDelimiter());
                 // Prepend a UTF-8 BOM so Excel renders Greek/Unicode correctly.
                 const blob = new Blob(["﻿" + csv], {
                     type: "text/csv;charset=utf-8;",
                 });
-                this.downloadBlob(blob, `${baseName}.csv`);
-            } else {
-                const aoa = this.toArrayOfArrays(cols);
-                const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
-                this.applyColumnFormats(ws, cols);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, this.sheetName());
-                const out = XLSX.write(wb, {
-                    bookType: "xlsx",
-                    type: "array",
-                }) as ArrayBuffer;
-                const blob = new Blob([out], {
-                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                });
-                this.downloadBlob(blob, `${baseName}.xlsx`);
+                this.lastError = "";
+                return { blob, fileName: `${baseName}.csv` };
             }
-
+            const aoa = this.toArrayOfArrays(cols);
+            const ws = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+            this.applyColumnFormats(ws, cols);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, this.sheetName());
+            const out = XLSX.write(wb, {
+                bookType: "xlsx",
+                type: "array",
+            }) as ArrayBuffer;
+            const blob = new Blob([out], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            });
             this.lastError = "";
-            this.setStatus(`Exported ${this.buffer.length} rows (${format})`);
+            return { blob, fileName: `${baseName}.xlsx` };
         } catch (e) {
             this.lastError = `Export error: ${(e as Error).message}`;
+            console.error("[DataExport] buildFile error:", e);
             this.setStatus(this.lastError);
+            this.notifyOutputChanged();
+            return null;
         }
-        this.notifyOutputChanged();
     }
 
     /** CSV delimiter from the manifest property (default comma). */
@@ -217,9 +294,18 @@ export class DataExport
             }
             this.rowCount = this.buffer.length;
             this.lastError = "";
+            this.log(
+                "ingest: parsed",
+                rows.length,
+                "rows (append:",
+                append,
+                ") — buffer now",
+                this.buffer.length
+            );
             this.setStatus(`${this.buffer.length} rows ready`);
         } catch (e) {
             this.lastError = `Parse error: ${(e as Error).message}`;
+            console.error("[DataExport] ingest/parse error:", e, "| raw input:", json);
             this.setStatus(this.lastError);
         }
         this.notifyOutputChanged();
@@ -334,6 +420,7 @@ export class DataExport
     // -- Download -------------------------------------------------------------
 
     private downloadBlob(blob: Blob, fileName: string): void {
+        this.log("downloadBlob: saving", fileName, "(", blob.size, "bytes )");
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -357,20 +444,41 @@ export class DataExport
         this.buttonsEl.className = "vms-pte-buttons";
 
         const excelBtn = this.makeButton("Export to Excel", "vms-pte-btn--excel", () =>
-            this.runExport("excel")
+            this.runExportNow("excel")
         );
         const csvBtn = this.makeButton("Export to CSV", "vms-pte-btn--csv", () =>
-            this.runExport("csv")
+            this.runExportNow("csv")
         );
 
         this.buttonsEl.appendChild(excelBtn);
         this.buttonsEl.appendChild(csvBtn);
 
+        // Prepared-download button: shown after a host-app trigger built a file.
+        // The user clicks it so the actual download has a real user gesture.
+        this.downloadEl = document.createElement("div");
+        this.downloadEl.className = "vms-pte-download";
+        this.downloadEl.style.display = "none";
+        this.downloadBtn = this.makeButton("⬇ Download", "vms-pte-btn--download", () =>
+            this.savePending()
+        );
+        this.downloadEl.appendChild(this.downloadBtn);
+
         this.statusEl = document.createElement("div");
         this.statusEl.className = "vms-pte-status";
 
         this.container.appendChild(this.buttonsEl);
+        this.container.appendChild(this.downloadEl);
         this.container.appendChild(this.statusEl);
+    }
+
+    private showDownloadButton(): void {
+        this.downloadBtn.textContent = `⬇ Download ${this.pendingFileName}`;
+        this.downloadEl.style.display = "flex";
+    }
+
+    private hideDownloadButton(): void {
+        this.pendingBlob = null;
+        this.downloadEl.style.display = "none";
     }
 
     private makeButton(
@@ -389,6 +497,11 @@ export class DataExport
     private setStatus(message: string): void {
         this.status = message;
         this.rowCount = this.buffer.length;
+    }
+
+    /** Console tracing for debugging — open DevTools (F12) and filter by "DataExport". */
+    private log(...args: unknown[]): void {
+        console.log("[DataExport]", ...args);
     }
 
     private refreshStatusUI(): void {
